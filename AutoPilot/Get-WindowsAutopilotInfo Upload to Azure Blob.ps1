@@ -2,15 +2,14 @@
 =================================================================================
  Title: Get-WindowsAutopilotInfo Upload to Azure Blob
  Author: vdBurgIT
- Version: 2.1
-
+ Version: 2.2
  Description:
      Dit script verzamelt de Windows Autopilot hardware-ID van het apparaat
      en uploadt deze naar een Azure Blob Storage-container via AzCopy.
 
  Updates:
      - Prefix voor CSV-bestandsnaam gewijzigd naar "AID_".
-     - Meest recente versie van AzCopy wordt automatisch opgehaald van GitHub.
+     - Downloadt de nieuwste versie van AzCopy via de directe Microsoft-link.
 
  Instructies:
      1. Zorg ervoor dat het apparaat internettoegang heeft.
@@ -33,29 +32,17 @@ if (-not $env:SasURL) {
     exit 1
 }
 
-# Functie om de nieuwste AzCopy-release van GitHub op te halen
-Function Get-LatestAzCopy {
-    $GitHubApiUrl = "https://api.github.com/repos/Azure/azure-storage-azcopy/releases/latest"
-    $Headers = @{ "User-Agent" = "PowerShell-Script" }
-    $Response = Invoke-RestMethod -Uri $GitHubApiUrl -Headers $Headers -Method Get
-    $DownloadUrl = $Response.assets | Where-Object { $_.name -like "*windows.zip" } | Select-Object -ExpandProperty browser_download_url
-    if (-not $DownloadUrl) {
-        Write-Error "Kan de download-URL voor AzCopy niet ophalen."
-        exit 1
-    }
-    return $DownloadUrl
-}
-
 # Download de nieuwste versie van AzCopy
-$AzCopyUrl = Get-LatestAzCopy
+$AzCopyUrl = "https://aka.ms/downloadazcopy-v10-windows"
 $AzCopyZipPath = "$env:TEMP\AzCopy.zip"
 Invoke-WebRequest -Uri $AzCopyUrl -OutFile $AzCopyZipPath -UseBasicParsing
 
 # Uitpakken van het archief
-Expand-Archive -Path $AzCopyZipPath -DestinationPath "$env:TEMP\AzCopy" -Force
+$AzCopyExtractPath = "$env:TEMP\AzCopy"
+Expand-Archive -Path $AzCopyZipPath -DestinationPath $AzCopyExtractPath -Force
 
 # Vind AzCopy
-$AzCopy = (Get-ChildItem -Path "$env:TEMP\AzCopy" -Recurse -File -Filter 'azcopy.exe').FullName
+$AzCopy = (Get-ChildItem -Path $AzCopyExtractPath -Recurse -File -Filter 'azcopy.exe').FullName
 
 # Controleer of NuGet-provider is geïnstalleerd, zo niet, installeer het
 if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
@@ -67,21 +54,21 @@ if (-not (Get-InstalledScript -Name Get-WindowsAutopilotInfo -ErrorAction Silent
     Install-Script Get-WindowsAutopilotInfo -Force
 }
 
-# Gebruik de nieuwe prefix "AID_" als onderdeel van de bestandsnaam
+# Gebruik de prefix "AID_" als onderdeel van de bestandsnaam
 $Filename = "AID_$($env:COMPUTERNAME).csv"
 
 # Locatie van het Autopilot-script
-$scriptlocation = (Get-InstalledScript -Name Get-WindowsAutopilotInfo).InstalledLocation
+$ScriptLocation = (Get-InstalledScript -Name Get-WindowsAutopilotInfo).InstalledLocation
 
 # Genereer CSV-bestand voor upload
-& "$scriptlocation\Get-WindowsAutoPilotInfo.ps1" -OutputFile "$env:TEMP\$Filename"
+& "$ScriptLocation\Get-WindowsAutoPilotInfo.ps1" -OutputFile "$env:TEMP\$Filename"
 
 # Upload het gegenereerde CSV-bestand naar Azure Blob Storage
-& $AzCopy cp "$env:TEMP\$Filename" $env:SasURL --overwrite true
+& $AzCopy cp "$env:TEMP\$Filename" $env:SasURL --overwrite=true
 
 # Optioneel: Opruimen van tijdelijke bestanden
 Remove-Item $AzCopyZipPath -Force
-Remove-Item "$env:TEMP\AzCopy" -Recurse -Force
+Remove-Item $AzCopyExtractPath -Recurse -Force
 Remove-Item "$env:TEMP\$Filename" -Force
 
 # Eind script
