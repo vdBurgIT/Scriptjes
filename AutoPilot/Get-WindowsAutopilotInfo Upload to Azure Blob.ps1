@@ -28,7 +28,7 @@
 
 # Controleer of de SAS URL is ingesteld
 if (-not $env:SasURL) {
-    Write-Error "De SAS URL is niet ingesteld. Controleer de Environment Vars in Tactical RMM."
+    Write-Error "De SAS URL is niet ingesteld. Controleer de Environment Vars in jouw RMM."
     exit 1
 }
 
